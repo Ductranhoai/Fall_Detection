@@ -1,0 +1,36 @@
+my_project/
+│
+├── main/                       ← code chính
+│   ├── main.c                  ← entry point
+│   ├── app.c                   ← loop chính / task quản lý
+│   └── include/
+│       └── app.h
+│
+├── components/                 ← các module tách riêng
+│
+│   ├── wifi/                   ← module WiFi
+│   │   ├── wifi.c
+│   │   ├── include/wifi.h
+│   │   ├── Kconfig
+│   │   └── CMakeLists.txt
+│   │
+│   ├── sensor/                 ← module sensor (MPU6050, etc.)
+│   │   ├── sensor.c
+│   │   ├── include/sensor.h
+│   │   ├── Kconfig
+│   │   └── CMakeLists.txt
+│   │
+│   ├── algorithm/              ← module xử lý dữ liệu, thuật toán phát hiện ngã
+│   │   ├── fall_detect.c
+│   │   ├── include/fall_detect.h
+│   │   ├── Kconfig             ← option enable/disable thuật toán
+│   │   └── CMakeLists.txt
+│   │
+│   └── utils/                  ← helper chung
+│       ├── logger.c
+│       └── include/logger.h
+│
+├── sdkconfig
+├── sdkconfig.defaults
+├── CMakeLists.txt               ← root
+└── platformio.ini               ← nếu dùng PlatformIO
