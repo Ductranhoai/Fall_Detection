@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "fs.h"
+#include "ble.h"
 
 #include "wifi_manager.h"
 #include "wifi_cli.h"
@@ -19,13 +20,14 @@ void app_main(void)
 {
     wifi_manager_init();
     fs_init();
-
+    ble_init();
     cli_init();
 
     cli_register_fs();
     cli_register_mem();
     cli_register_i2c();
     wifi_cli_register();
+    cli_register_system();
 
     xTaskCreate(cli_task, "cli", 4096, NULL, 5, NULL);
 }

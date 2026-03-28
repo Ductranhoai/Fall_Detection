@@ -1,0 +1,23 @@
+Wifi 
+    wifi_scan
+    wifi_connect "uuid" "pass"
+    wifi_status
+    wifi_disconnect
+
+I2C
+    i2c_scan
+    i2c_read <addr> <reg>
+
+GPIO Control
+    gpio_set <pin> <0|1>
+    gpio_get <pin>
+
+Advanced
+    devmem <addr>        # đọc register
+    devmemw <addr> <val> # ghi register
+
+Log
+    log_show
+    log_clear
+
+    
