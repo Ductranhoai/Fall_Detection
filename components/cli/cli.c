@@ -67,7 +67,7 @@ static void cli_task(void *arg)
 }
 
 // Add extern declaration
-extern void cli_register_mpu(void); // Add this line
+extern void cli_register_mpu(void);  // Add this line
 
 void cli_init_all(void)
 {
@@ -80,8 +80,7 @@ void cli_init_all(void)
     cli_register_i2c();
     cli_register_gpio();
     cli_register_system();
-    cli_register_mpu(); // Add this line
-    cli_register_fall();
+    cli_register_mpu();  // Add this line
 
 #ifdef CONFIG_CLI_ENABLE_LOG
     cli_register_log();
