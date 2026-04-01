@@ -32,8 +32,6 @@
 //     xTaskCreate(cli_task, "cli", 4096, NULL, 5, NULL);
 // }
 
-
-
 // #include <stdio.h>
 // #include "freertos/FreeRTOS.h"
 // #include "freertos/task.h"
@@ -127,7 +125,6 @@
 //     xTaskCreate(mpu_task, "mpu", 4096, NULL, 5, NULL);
 // }
 
-
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -154,16 +151,16 @@ static void on_mpu_data(mpu6050_data_t *data)
     // Add your custom logic here (e.g., fall detection)
     static uint32_t last_log = 0;
     uint32_t now = esp_timer_get_time() / 1000;
-    
+
     // Example: Detect potential fall
-    if (abs(data->accel_z) < 0.5) {
+    if (abs(data->accel_z) < 0.5)
+    {
         ESP_LOGW(TAG, "Potential fall detected! Z-accel: %.2fg", data->accel_z);
-        // Here you could trigger alarm, send notification, etc.
     }
-    
-    // Log every 2 seconds (optional)
-    if (now - last_log > 2000) {
-        ESP_LOGI(TAG, "MPU Status - Pitch: %.1f°, Roll: %.1f°, Z: %.2fg", 
+
+    if (now - last_log > 2000)
+    {
+        ESP_LOGI(TAG, "MPU Status - Pitch: %.1f°, Roll: %.1f°, Z: %.2fg",
                  data->pitch, data->roll, data->accel_z);
         last_log = now;
     }
@@ -172,34 +169,28 @@ static void on_mpu_data(mpu6050_data_t *data)
 void app_main(void)
 {
     ESP_LOGI(TAG, "System starting...");
-    
-    // Initialize WiFi
     wifi_manager_init();
-    
-    // Initialize filesystem
+
     fs_init();
-    
+
     // Initialize MPU with default configuration
-    // You can use different configs: mpu_get_default_config(), 
+    // You can use different configs: mpu_get_default_config(),
     // mpu_get_fast_config(), or mpu_get_lowpower_config()
     mpu_config_t mpu_config = mpu_get_default_config();
-    
+
     esp_err_t ret = mpu_manager_init(&mpu_config);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK)
+    {
         ESP_LOGE(TAG, "Failed to initialize MPU! Error: %s", esp_err_to_name(ret));
-    } else {
+    }
+    else
+    {
         ESP_LOGI(TAG, "MPU initialized successfully");
-        // Start monitoring with callback
-        // Pass NULL to use default fall detection, or your custom callback
         mpu_manager_start_monitoring(on_mpu_data);
     }
-    
-    // Initialize CLI (will also register MPU commands)
+
     cli_init_all();
-    
-    // Create CLI task (already created in cli_init_all)
-    // No need to create another CLI task here
-    
+
     ESP_LOGI(TAG, "System ready! Use CLI commands:");
     ESP_LOGI(TAG, "  - mpu_read      : Read sensor once");
     ESP_LOGI(TAG, "  - mpu_cal       : Calibrate sensor");
