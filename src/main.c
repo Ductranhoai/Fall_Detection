@@ -171,6 +171,7 @@ void app_main(void)
     
     // Initialize WiFi
     wifi_manager_init();
+    vTaskDelay(pdMS_TO_TICKS(500));
     
     // Initialize filesystem
     fs_init();
@@ -188,6 +189,7 @@ void app_main(void)
         // Start monitoring with callback
         // Pass NULL to use default fall detection, or your custom callback
         mpu_manager_start_monitoring(on_mpu_data);
+        ESP_LOGI(TAG, "✓ MPU monitoring started");
     }
     
     // Initialize CLI (will also register MPU commands)
@@ -196,10 +198,14 @@ void app_main(void)
     // Create CLI task (already created in cli_init_all)
     // No need to create another CLI task here
     
-    ESP_LOGI(TAG, "System ready! Use CLI commands:");
-    ESP_LOGI(TAG, "  - mpu_read      : Read sensor once");
-    ESP_LOGI(TAG, "  - mpu_cal       : Calibrate sensor");
-    ESP_LOGI(TAG, "  - mpu_monitor   : Start/stop monitoring");
-    ESP_LOGI(TAG, "  - mpu_config    : Show configuration");
-    ESP_LOGI(TAG, "  - mpu_test      : Quick hardware test");
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "System ready!");
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "Available commands:");
+    ESP_LOGI(TAG, "  WiFi: wifi_scan, wifi_status, wifi_connect, ifconfig");
+    ESP_LOGI(TAG, "  MPU:  mpu_read, mpu_read -w, mpu_stop, mpu_cal, mpu_test");
+    ESP_LOGI(TAG, "  FS:   ls, pwd, cd, cat, touch");
+    ESP_LOGI(TAG, "  FALL:  fall_status, fall_test, fall_reset");
+    ESP_LOGI(TAG, "  System: reboot, free, tasks");
+    ESP_LOGI(TAG, "========================================");
 }

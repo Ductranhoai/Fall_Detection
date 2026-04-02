@@ -52,38 +52,60 @@ void cli_start(void)
     }
 }
 
+// External declarations
 extern void cli_register_system(void);
 extern void cli_register_fs(void);
 extern void cli_register_mem(void);
 extern void cli_register_i2c(void);
 extern void cli_register_gpio(void);
 extern void cli_register_log(void);
-extern void cli_register_mpu(void);  // Add this
+extern void cli_register_mpu(void);
 extern void cli_register_fall(void);
+extern void wifi_cli_register(void);  // THÊM DÒNG NÀY
 
 static void cli_task(void *arg)
 {
     cli_start();
 }
 
-// CHỈ GIỮ LẠI MỘT HÀM cli_init_all
 void cli_init_all(void)
 {
     // 1. init console + UART
     cli_init();
 
     // 2. register command
+    printf("\n=== Registering CLI Commands ===\n");
+    
     cli_register_fs();
+    printf("✓ FS commands\n");
+    
     cli_register_mem();
+    printf("✓ MEM commands\n");
+    
     cli_register_i2c();
+    printf("✓ I2C commands\n");
+    
     cli_register_gpio();
+    printf("✓ GPIO commands\n");
+    
     cli_register_system();
-    cli_register_mpu();  // Add MPU commands
-    cli_register_fall(); 
+    printf("✓ SYSTEM commands\n");
+
+    cli_register_fall();
+    printf("Fall detetcion\n");
+    
+    cli_register_mpu();
+    printf("✓ MPU commands\n");
+    
+    wifi_cli_register();  // THÊM DÒNG NÀY - Đăng ký WiFi commands
+    printf("✓ WiFi commands\n");
 
 #ifdef CONFIG_CLI_ENABLE_LOG
     cli_register_log();
+    printf("✓ LOG commands\n");
 #endif
+
+    printf("=== All commands registered ===\n\n");
 
     // 3. start CLI task
     xTaskCreate(cli_task, "cli", 8192, NULL, 5, NULL);

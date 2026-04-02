@@ -10,5 +10,5 @@ idf_component_register(
         "cli_cmd_mpu.c"
         "cli_cmd_fall.c"
     INCLUDE_DIRS "."
-    REQUIRES console driver esp_common freertos mpu
+    REQUIRES console driver esp_common freertos mpu wifi
 )
