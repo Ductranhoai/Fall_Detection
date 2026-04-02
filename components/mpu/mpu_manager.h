@@ -3,7 +3,8 @@
 #include <stdbool.h>
 
 // Configuration structure
-typedef struct {
+typedef struct
+{
     uint8_t sda_pin;
     uint8_t scl_pin;
     i2c_port_t i2c_port;
@@ -24,7 +25,7 @@ esp_err_t mpu_manager_deinit(void);
 esp_err_t mpu_manager_get_data(mpu6050_data_t *data);
 void mpu_manager_start_monitoring(mpu_data_callback_t callback);
 void mpu_manager_stop_monitoring(void);
-const mpu_config_t* mpu_manager_get_config(void);
+const mpu_config_t *mpu_manager_get_config(void);
 bool mpu_manager_is_initialized(void);
 bool mpu_manager_is_monitoring(void);
 
@@ -42,7 +43,6 @@ static inline mpu_config_t mpu_get_default_config(void)
         .sample_rate_hz = 100,
         .read_interval_ms = 100,
         .enable_fifo = false,
-        .enable_calibration = true
-    };
+        .enable_calibration = true};
     return config;
 }

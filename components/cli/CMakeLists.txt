@@ -8,6 +8,8 @@ idf_component_register(
         "cli_cmd_gpio.c"
         "cli_cmd_log.c"
         "cli_cmd_mpu.c"
+        "cli_cmd_fall.c"
     INCLUDE_DIRS "."
     REQUIRES console driver esp_common freertos mpu
+    PRIV_REQUIRES wifi
 )
