@@ -11,4 +11,4 @@ void cli_register_mem(void);
 void cli_register_i2c(void);
 void cli_register_gpio(void);
 void cli_register_log(void);
-void cli_register_mpu(void);
+void cli_register_mpu(void);  // Add this line

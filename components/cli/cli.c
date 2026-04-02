@@ -18,7 +18,6 @@ void cli_init(void)
     uart_driver_install(UART_NUM_0, 256, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_0, &uart_config);
 
-// Sử dụng hàm cũ, bỏ qua warning hoặc disable warning
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     esp_vfs_dev_uart_use_driver(UART_NUM_0);
@@ -59,16 +58,14 @@ extern void cli_register_mem(void);
 extern void cli_register_i2c(void);
 extern void cli_register_gpio(void);
 extern void cli_register_log(void);
-extern void cli_register_fall(void);
+extern void cli_register_mpu(void);  // Add this
 
 static void cli_task(void *arg)
 {
     cli_start();
 }
 
-// Add extern declaration
-extern void cli_register_mpu(void); // Add this line
-
+// CHỈ GIỮ LẠI MỘT HÀM cli_init_all
 void cli_init_all(void)
 {
     // 1. init console + UART
@@ -80,13 +77,12 @@ void cli_init_all(void)
     cli_register_i2c();
     cli_register_gpio();
     cli_register_system();
-    cli_register_mpu(); // Add this line
-    cli_register_fall();
+    cli_register_mpu();  // Add MPU commands
 
 #ifdef CONFIG_CLI_ENABLE_LOG
     cli_register_log();
 #endif
 
-    // 3. start CLI task (KHÔNG block main)
+    // 3. start CLI task
     xTaskCreate(cli_task, "cli", 8192, NULL, 5, NULL);
 }
