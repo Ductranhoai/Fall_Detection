@@ -1,4 +1,5 @@
 #include "mpu_manager.h"
+#include "fall_detection.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -19,8 +20,22 @@ static void default_callback(mpu6050_data_t *data)
     static uint32_t last_log = 0;
     uint32_t now = esp_timer_get_time() / 1000;
     
+    // Process fall detection
+    fall_detection_process(data);
+    fall_result_t result = fall_detection_get_result();
+    
+    // Log fall events
+    if (result.fall_detected) {
+        ESP_LOGW(TAG, "⚠️ FALL DETECTED! ⚠️");
+        ESP_LOGW(TAG, "  Reason: %s", result.detection_reason);
+        ESP_LOGW(TAG, "  Max impact: %.2fg", result.max_accel);
+        ESP_LOGW(TAG, "  Final tilt: %.1f°", result.final_tilt);
+    }
+    
+    // Normal logging every 2 seconds
     if (now - last_log > 2000) {
-        ESP_LOGI(TAG, "Pitch: %.1f°, Roll: %.1f°, Z: %.2fg", 
+        ESP_LOGI(TAG, "Status - State: %s, Pitch: %.1f°, Roll: %.1f°, Z: %.2fg",
+                 fall_state_to_string(result.state),
                  data->pitch, data->roll, data->accel_z);
         last_log = now;
     }
@@ -83,6 +98,9 @@ esp_err_t mpu_manager_init(const mpu_config_t *config)
     
     s_initialized = true;
     ESP_LOGI(TAG, "MPU Manager initialized successfully");
+
+    fall_config_t fall_config = fall_get_default_config();
+    fall_detection_init(&fall_config);
     
     return ESP_OK;
 }

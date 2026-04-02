@@ -59,6 +59,7 @@ extern void cli_register_i2c(void);
 extern void cli_register_gpio(void);
 extern void cli_register_log(void);
 extern void cli_register_mpu(void);  // Add this
+extern void cli_register_fall(void);
 
 static void cli_task(void *arg)
 {
@@ -78,6 +79,7 @@ void cli_init_all(void)
     cli_register_gpio();
     cli_register_system();
     cli_register_mpu();  // Add MPU commands
+    cli_register_fall(); 
 
 #ifdef CONFIG_CLI_ENABLE_LOG
     cli_register_log();

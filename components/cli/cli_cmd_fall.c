@@ -6,15 +6,14 @@
 static int cmd_fall_status(int argc, char **argv)
 {
     fall_result_t result = fall_detection_get_result();
-
+    
     printf("\n========================================\n");
     printf("      Fall Detection Status            \n");
     printf("========================================\n");
     printf("\nCurrent State: %s\n", fall_state_to_string(result.state));
     printf("Fall Detected: %s\n", result.fall_detected ? "YES" : "NO");
-
-    if (result.fall_detected)
-    {
+    
+    if (result.fall_detected) {
         printf("\n--- Fall Details ---\n");
         printf("  Time: %lu ms\n", result.fall_timestamp);
         printf("  Min Acceleration (Free fall): %.2fg\n", result.min_accel);
@@ -22,15 +21,15 @@ static int cmd_fall_status(int argc, char **argv)
         printf("  Final Tilt: %.1f°\n", result.final_tilt);
         printf("  Reason: %s\n", result.detection_reason);
     }
-
+    
     printf("\n--- Detection Thresholds ---\n");
     fall_config_t config = fall_get_default_config();
     printf("  Free Fall Threshold: %.2fg\n", config.free_fall_threshold);
     printf("  Impact Threshold: %.2fg\n", config.impact_threshold);
     printf("  Tilt Threshold: %.1f°\n", config.tilt_threshold);
-
+    
     printf("\n========================================\n");
-
+    
     return 0;
 }
 
@@ -55,7 +54,7 @@ static int cmd_fall_test(int argc, char **argv)
     printf("\nWatch the console output for fall detection messages!\n");
     printf("\nCurrent state: %s\n", fall_state_to_string(fall_detection_get_result().state));
     printf("\n========================================\n");
-
+    
     return 0;
 }
 
@@ -66,13 +65,13 @@ void cli_register_fall(void)
         .help = "Show fall detection status",
         .func = cmd_fall_status,
     });
-
+    
     esp_console_cmd_register(&(esp_console_cmd_t){
         .command = "fall_reset",
         .help = "Reset fall detection state",
         .func = cmd_fall_reset,
     });
-
+    
     esp_console_cmd_register(&(esp_console_cmd_t){
         .command = "fall_test",
         .help = "Instructions for testing fall detection",

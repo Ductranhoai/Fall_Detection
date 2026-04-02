@@ -3,8 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <math.h>  // QUAN TRỌNG: Thêm dòng này
-
+#include <math.h>  
 // Global flag for continuous read mode
 static volatile bool continuous_read_active = false;
 static TaskHandle_t continuous_read_task_handle = NULL;
