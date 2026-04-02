@@ -22,13 +22,56 @@ static int cmd_wifi_scan(int argc, char **argv)
 
 static int cmd_wifi_connect(int argc, char **argv)
 {
-    if (argc < 3)
-    {
-        printf("wifi_connect <ssid> <pass>\n");
+    if (argc < 3) {
+        printf("Usage: wifi_connect <ssid> <password>\n");
+        printf("Example: wifi_connect MyWiFi 12345678\n");
         return 1;
     }
-
+    
+    printf("\n========================================\n");
+    printf("📡 Connecting to WiFi: %s\n", argv[1]);
+    printf("========================================\n\n");
+    
+    // Disconnect hiện tại
+    if (wifi_manager_is_connected() || wifi_manager_is_connecting()) {
+        printf("Disconnecting current connection...\n");
+        wifi_manager_disconnect();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    
+    // Kết nối với credentials mới
     wifi_manager_connect(argv[1], argv[2]);
+    
+    // Chờ kết nối
+    int timeout = 50; // 5 seconds
+    printf("Connecting");
+    
+    while (timeout-- > 0 && !wifi_manager_is_connected() && wifi_manager_is_connecting()) {
+        printf(".");
+        fflush(stdout);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    printf("\n\n");
+    
+    if (wifi_manager_is_connected()) {
+        printf("✅ Connected successfully!\n");
+        printf("   SSID: %s\n", wifi_manager_get_ssid());
+        printf("   IP: %s\n", wifi_manager_get_ip());
+        
+        wifi_ap_record_t ap_info;
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            printf("   Signal: %d dBm\n", ap_info.rssi);
+        }
+        printf("\n✅ Credentials saved. Will auto-reconnect after reboot.\n");
+    } else {
+        printf("❌ Connection FAILED!\n");
+        printf("   Password may be incorrect for SSID '%s'\n", argv[1]);
+        printf("   Please check your WiFi password.\n");
+        // Xóa credentials sai
+        wifi_manager_clear_credentials();
+    }
+    
+    printf("\n========================================\n");
     return 0;
 }
 
@@ -77,6 +120,15 @@ static int cmd_ifconfig(int argc, char **argv)
     return 0;
 }
 
+static int cmd_wifi_clear(int argc, char **argv)
+{
+    printf("🗑️  Clearing saved WiFi credentials...\n");
+    wifi_manager_clear_credentials();
+    printf("✅ Credentials cleared\n");
+    printf("   WiFi will not auto-connect after reboot\n");
+    return 0;
+}
+
 void wifi_cli_register(void)
 {
     esp_console_cmd_register(&(esp_console_cmd_t){
@@ -107,5 +159,11 @@ void wifi_cli_register(void)
         .command = "ifconfig",
         .help = "Show network info",
         .func = cmd_ifconfig,
+    });
+
+     esp_console_cmd_register(&(esp_console_cmd_t){
+        .command = "wifi_clear",
+        .help = "Clear saved WiFi credentials",
+        .func = cmd_wifi_clear,
     });
 }
