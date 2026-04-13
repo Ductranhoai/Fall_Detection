@@ -40,7 +40,7 @@ void cli_start(void)
 
     while (true)
     {
-        line = linenoise("esp32>> ");
+        line = linenoise("esp_32:# ");
         if (!line)
             continue;
 
@@ -71,37 +71,19 @@ static void cli_task(void *arg)
 void cli_init_all(void)
 {
     cli_init();
-
-    printf("\n=== Registering CLI Commands ===\n");
-
     cli_register_fs();
-    printf("FS commands\n");
-
     cli_register_mem();
-    printf("MEM commands\n");
-
     cli_register_i2c();
-    printf("I2C commands\n");
-
     cli_register_gpio();
-    printf("GPIO commands\n");
-
     cli_register_system();
-    printf("SYSTEM commands\n");
-
     cli_register_fall();
-    printf("Fall detetcion\n");
-
     cli_register_mpu();
-    printf("MPU commands\n");
-
     wifi_cli_register();
-    printf("WiFi commands\n");
 
 #ifdef CONFIG_CLI_ENABLE_LOG
     cli_register_log();
     printf("LOG commands\n");
 #endif
-    printf("=== All commands registered ===\n\n");
+    printf("All commands registered\n\n");
     xTaskCreate(cli_task, "cli", 8192, NULL, 5, NULL);
 }

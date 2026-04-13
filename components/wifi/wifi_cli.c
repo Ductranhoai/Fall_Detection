@@ -30,10 +30,9 @@ static int cmd_wifi_connect(int argc, char **argv)
     }
 
     printf("\n========================================\n");
-    printf("📡 Connecting to WiFi: %s\n", argv[1]);
+    printf("    Connecting to WiFi: %s\n", argv[1]);
     printf("========================================\n\n");
 
-    // Disconnect hiện tại
     if (wifi_manager_is_connected() || wifi_manager_is_connecting())
     {
         printf("Disconnecting current connection...\n");
@@ -41,11 +40,9 @@ static int cmd_wifi_connect(int argc, char **argv)
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    // Kết nối với credentials mới
     wifi_manager_connect(argv[1], argv[2]);
 
-    // Chờ kết nối
-    int timeout = 50; // 5 seconds
+    int timeout = 50; 
     printf("Connecting");
 
     while (timeout-- > 0 && !wifi_manager_is_connected() && wifi_manager_is_connecting())
@@ -74,7 +71,6 @@ static int cmd_wifi_connect(int argc, char **argv)
         printf("   Connection FAILED!\n");
         printf("   Password may be incorrect for SSID '%s'\n", argv[1]);
         printf("   Please check your WiFi password.\n");
-        // Xóa credentials sai
         wifi_manager_clear_credentials();
     }
 
@@ -135,7 +131,7 @@ static int cmd_ifconfig(int argc, char **argv)
 
 static int cmd_wifi_clear(int argc, char **argv)
 {
-    printf("🗑️  Clearing saved WiFi credentials...\n");
+    printf("  Clearing saved WiFi credentials...\n");
     wifi_manager_clear_credentials();
     printf(" Credentials cleared\n");
     printf("   WiFi will not auto-connect after reboot\n");

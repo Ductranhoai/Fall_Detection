@@ -124,6 +124,9 @@
 //     xTaskCreate(cli_task, "cli", 4096, NULL, 5, NULL);
 //     xTaskCreate(mpu_task, "mpu", 4096, NULL, 5, NULL);
 // }
+
+
+
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -214,3 +217,7 @@ void app_main(void)
     ESP_LOGI(TAG, "  System: reboot, free, tasks");
     ESP_LOGI(TAG, "========================================");
 }
+
+
+
+

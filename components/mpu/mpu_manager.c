@@ -26,7 +26,7 @@ static void default_callback(mpu6050_data_t *data)
     
     // Log fall events
     if (result.fall_detected) {
-        ESP_LOGW(TAG, "⚠️ FALL DETECTED! ⚠️");
+        ESP_LOGW(TAG, "  FALL DETECTED! ");
         ESP_LOGW(TAG, "  Reason: %s", result.detection_reason);
         ESP_LOGW(TAG, "  Max impact: %.2fg", result.max_accel);
         ESP_LOGW(TAG, "  Final tilt: %.1f°", result.final_tilt);
