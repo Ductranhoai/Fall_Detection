@@ -211,6 +211,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
 
 static const char *TAG = "MPU_MANAGER";
 static mpu_config_t s_mpu_config;
@@ -226,7 +227,7 @@ static void continuous_read_task(void *arg);
 static void default_callback(mpu6050_data_t *data)
 {
     static uint32_t last_log = 0;
-    uint32_t now = esp_timer_get_time() / 1000;
+    int64_t now = esp_timer_get_time() / 1000;  // ms
     
     // Process fall detection
     fall_detection_process(data);

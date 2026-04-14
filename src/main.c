@@ -106,6 +106,7 @@
 #include "mpu_manager.h"
 #include "mpu_config.h"
 #include "fall_detection.h"
+#include "esp_log.h"
 
 static const char *TAG = "MAIN";
 
