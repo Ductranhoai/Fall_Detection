@@ -27,15 +27,15 @@ typedef struct {
 static inline mpu_config_t mpu_get_default_config(void)
 {
     mpu_config_t config = {
-        .sda_pin = 21,
-        .scl_pin = 22,
+        .sda_pin = 5,
+        .scl_pin = 4,
         .i2c_port = I2C_NUM_0,
         .i2c_freq = 400000,
         .accel_range = MPU_ACCEL_RANGE_2G,      // ±2g for better sensitivity
         .gyro_range = MPU_GYRO_RANGE_250,       // ±250°/s for fall detection
-        .dlpf_bandwidth = MPU_DLPF_BW_21,       // 21Hz filter for noise reduction
-        .sample_rate_hz = 100,                  // 100 Hz sampling
-        .read_interval_ms = 50,                 // Read every 50ms (20 Hz)
+        .dlpf_bandwidth = MPU_DLPF_BW_94,       // 21Hz filter for noise reduction
+        .sample_rate_hz = 200,                  // 100 Hz sampling
+        .read_interval_ms = 10,                 // Read every 50ms (20 Hz)
         .enable_fifo = false,                   // FIFO not needed for basic use
         .enable_calibration = true              // Auto-calibrate on startup
     };
@@ -46,8 +46,8 @@ static inline mpu_config_t mpu_get_default_config(void)
 static inline mpu_config_t mpu_get_fast_config(void)
 {
     mpu_config_t config = {
-        .sda_pin = 21,
-        .scl_pin = 22,
+        .sda_pin = 5,
+        .scl_pin = 4,
         .i2c_port = I2C_NUM_0,
         .i2c_freq = 400000,
         .accel_range = MPU_ACCEL_RANGE_4G,      // ±4g for higher range

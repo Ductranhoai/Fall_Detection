@@ -1,3 +1,4 @@
+#if CONFIG_IDF_TARGET_ESP32
 #include <stdio.h>
 #include <string.h>
 
@@ -110,3 +111,4 @@ esp_err_t bt_spp_send(const uint8_t *data, size_t len)
 
     return esp_spp_write(spp_handle, len, (uint8_t *)data);
 }
+#endif

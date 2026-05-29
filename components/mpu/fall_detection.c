@@ -25,13 +25,20 @@ static fall_orientation_t s_orientation = {1.0f, 0.0f, 0.0f, false};
 fall_config_t fall_get_default_config(void)
 {
     fall_config_t config = {
-        .free_fall_threshold = 0.5,
-        .impact_threshold = 2.5,
-        .tilt_threshold = 45.0,
-        .free_fall_min_time = 100,
-        .impact_time_window = 200,
-        .tilt_time_window = 2000,
-        .fall_confirm_time = 500};
+        // .free_fall_threshold = 0.5,
+        // .impact_threshold = 2.5,
+        // .tilt_threshold = 45.0,
+        // .free_fall_min_time = 100,
+        // .impact_time_window = 200,
+        // .tilt_time_window = 2000,
+        // .fall_confirm_time = 500};
+        .free_fall_threshold = 0.25,
+        .impact_threshold = 2.0,
+        .tilt_threshold = 60.0,
+        .free_fall_min_time = 80,
+        .impact_time_window = 150,
+        .tilt_time_window = 3000,
+        .fall_confirm_time = 200};
     return config;
 }
 
@@ -158,7 +165,8 @@ esp_err_t fall_detection_process(mpu6050_data_t *data)
             float pitch_diff = fabs(data->pitch - s_orientation.pitch_offset);
             float roll_diff = fabs(data->roll - s_orientation.roll_offset);
 
-            if (z_diff > 0.3f || pitch_diff > 10.0f || roll_diff > 10.0f)
+            // if (z_diff > 0.3f || pitch_diff > 10.0f || roll_diff > 10.0f)
+            if (z_diff > 0.8f || pitch_diff > 45.0f || roll_diff > 45.0f)
             {
                 drift_count++;
                 if (drift_count >= 20)
