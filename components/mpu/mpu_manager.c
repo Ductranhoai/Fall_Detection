@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
+#include <string.h>
 
 static const char *TAG = "MPU_MANAGER";
 
@@ -44,21 +45,19 @@ static void continuous_read_task(void *arg);
 static void default_callback(mpu6050_data_t *data)
 {
     static uint32_t last_log = 0;
+    static bool last_fall = false;
     int64_t now = esp_timer_get_time() / 1000;  // Lấy timestamp hiện tại (ms)
     
-    /* Xử lý thuật toán phát hiện té ngã */
     fall_detection_process(data);
     fall_result_t result = fall_detection_get_result();
-    
-    /* Log ngay lập tức khi phát hiện té ngã (cấp độ WARNING) */
-    if (result.fall_detected) {
+    if (result.fall_detected && !last_fall) {
         ESP_LOGW(TAG, "  FALL DETECTED! ");
         ESP_LOGW(TAG, "  Reason: %s", result.detection_reason);
         ESP_LOGW(TAG, "  Max impact: %.2fg", result.max_accel);
         ESP_LOGW(TAG, "  Final tilt: %.1f°", result.final_tilt);
     }
+    last_fall = result.fall_detected;
     
-    /* Log trạng thái bình thường mỗi 2 giây để giám sát */
     if (now - last_log > 2000) {
         ESP_LOGI(TAG, "Status - State: %s, Pitch: %.1f°, Roll: %.1f°, Z: %.2fg",
                  fall_state_to_string(result.state),
@@ -182,11 +181,11 @@ esp_err_t mpu_manager_init(mpu_config_t *config)
  * @return esp_err_t ESP_OK nếu thành công
  * 
  * Cấu hình mặc định (từ mpu_get_default_config):
- * - I2C: port 0, SDA=21, SCL=22, 400kHz
- * - Accel: ±2g, Gyro: ±250 deg/s
- * - DLPF: 21Hz, sample rate: 100Hz
+ * - I2C: port 0, SDA=5, SCL=4, 100kHz
+ * - Accel: ±8g, Gyro: ±500 deg/s
+ * - DLPF: 94Hz, sample rate: 200Hz
  * - Read interval: 10ms (100Hz)
- * - Calibration: ENABLED
+ * - Calibration: DISABLED
  * 
  * Đây là cấu hình khuyến nghị cho hầu hết ứng dụng
  */

@@ -41,7 +41,6 @@ static esp_err_t set_accel_range(mpu_accel_range_t range);
 static esp_err_t set_gyro_range(mpu_gyro_range_t range);
 static esp_err_t set_dlpf(mpu_dlpf_bandwidth_t bandwidth);
 static esp_err_t set_sample_rate(uint32_t rate_hz);
-static void update_scales(void);
 
 /**
  * @brief Ghi 1 byte dữ liệu vào thanh ghi của MPU6050
@@ -56,7 +55,17 @@ static void update_scales(void);
 static esp_err_t write_byte(uint8_t reg, uint8_t data)
 {
     uint8_t buf[2] = {reg, data};
-    return i2c_master_write_to_device(s_i2c_port, MPU6050_ADDR, buf, 2, pdMS_TO_TICKS(100));
+    esp_err_t ret = ESP_FAIL;
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        ret = i2c_master_write_to_device(s_i2c_port, MPU6050_ADDR, buf, 2, pdMS_TO_TICKS(100));
+        if (ret == ESP_OK) {
+            return ESP_OK;
+        }
+        vTaskDelay(1);
+    }
+
+    return ret;
 }
 
 /**
@@ -71,7 +80,17 @@ static esp_err_t write_byte(uint8_t reg, uint8_t data)
  */
 static esp_err_t read_bytes(uint8_t reg, uint8_t *data, size_t len)
 {
-    return i2c_master_write_read_device(s_i2c_port, MPU6050_ADDR, &reg, 1, data, len, pdMS_TO_TICKS(100));
+    esp_err_t ret = ESP_FAIL;
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        ret = i2c_master_write_read_device(s_i2c_port, MPU6050_ADDR, &reg, 1, data, len, pdMS_TO_TICKS(100));
+        if (ret == ESP_OK) {
+            return ESP_OK;
+        }
+        vTaskDelay(1);
+    }
+
+    return ret;
 }
 
 /**
@@ -194,22 +213,19 @@ static esp_err_t set_dlpf(mpu_dlpf_bandwidth_t bandwidth)
  */
 static esp_err_t set_sample_rate(uint32_t rate_hz)
 {
-    /* Tính toán hệ số chia dựa trên giả định 8kHz internal rate */
-    uint8_t divider = (8000 / rate_hz) - 1;
-    if (divider > 255) divider = 255;  /* Giới hạn trong 8-bit */
-    
-    return write_byte(0x19, divider);  /* Thanh ghi SMPLRT_DIV */
-}
+    /*
+     * Datasheet: gyro output rate = 8 kHz khi DLPF tat (CFG=0/7),
+     * 1 kHz khi DLPF bat (CFG=1..6).
+     */
+    if (rate_hz < 4)   rate_hz = 4;
+    if (rate_hz > 1000) rate_hz = 1000;
 
-/**
- * @brief Cập nhật hệ số scale theo cấu hình hiện tại
- * ===================================================
- * Hàm này được gọi để đồng bộ scale factor với dải đo đã cấu hình
- */
-static void update_scales(void)
-{
-    set_accel_range(s_config.accel_range);
-    set_gyro_range(s_config.gyro_range);
+    uint32_t base_rate = (s_config.dlpf_bandwidth == MPU_DLPF_BW_260) ? 8000u : 1000u;
+    uint32_t divisor = base_rate / rate_hz;
+    if (divisor == 0) divisor = 1;
+
+    uint8_t divider = (uint8_t)(divisor - 1);
+    return write_byte(0x19, divider);  /* Thanh ghi SMPLRT_DIV */
 }
 
 /**
@@ -218,22 +234,22 @@ static void update_scales(void)
  * @return mpu6050_config_t  Cấu hình với các giá trị khuyến nghị
  * 
  * Cấu hình mặc định:
- * - I2C port 0, SDA=21, SCL=22, 400kHz
- * - Accel ±2g, Gyro ±250 deg/s
- * - DLPF 21Hz, sample rate 100Hz
+ * - I2C port 0, SDA=5, SCL=4, 100kHz
+ * - Accel ±8g, Gyro ±500 deg/s
+ * - DLPF 94Hz, sample rate 200Hz
  * - FIFO disabled
  */
 mpu6050_config_t mpu6050_get_default_config(void)
 {
     mpu6050_config_t config = {
         .i2c_port = I2C_NUM_0,
-        .i2c_freq_hz = 400000,
-        .sda_pin = 21,
-        .scl_pin = 22,
-        .accel_range = MPU_ACCEL_RANGE_2G,
-        .gyro_range = MPU_GYRO_RANGE_250,
-        .dlpf_bandwidth = MPU_DLPF_BW_21,
-        .sample_rate_hz = 100,
+        .i2c_freq_hz = 100000,
+        .sda_pin = 5,
+        .scl_pin = 4,
+        .accel_range = MPU_ACCEL_RANGE_8G,
+        .gyro_range = MPU_GYRO_RANGE_500,
+        .dlpf_bandwidth = MPU_DLPF_BW_94,
+        .sample_rate_hz = 200,
         .enable_fifo = false,
         .fifo_buffer_size = 1024
     };
@@ -267,8 +283,8 @@ esp_err_t mpu6050_init(const mpu6050_config_t *config)
     s_i2c_port = s_config.i2c_port;
     
     ESP_LOGI(TAG, "Initializing MPU6050...");
-    ESP_LOGI(TAG, "I2C: port=%d, SDA=%d, SCL=%d, freq=%dHz", 
-             s_config.i2c_port, s_config.sda_pin, s_config.scl_pin, s_config.i2c_freq_hz);
+    // ESP_LOGI(TAG, "I2C: port=%d, SDA=%d, SCL=%d, freq=%dHz", 
+    //          s_config.i2c_port, s_config.sda_pin, s_config.scl_pin, s_config.i2c_freq_hz);
     
     /* Cấu hình I2C master */
     i2c_config_t i2c_conf = {
@@ -287,6 +303,10 @@ esp_err_t mpu6050_init(const mpu6050_config_t *config)
     }
     
     ret = i2c_driver_install(s_config.i2c_port, I2C_MODE_MASTER, 0, 0, 0);
+    if (ret == ESP_ERR_INVALID_STATE) {
+        i2c_driver_delete(s_config.i2c_port);
+        ret = i2c_driver_install(s_config.i2c_port, I2C_MODE_MASTER, 0, 0, 0);
+    }
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "I2C driver install failed: %s", esp_err_to_name(ret));
         return ret;
@@ -309,21 +329,53 @@ esp_err_t mpu6050_init(const mpu6050_config_t *config)
     }
     
     /* Cấu hình cảm biến */
-    set_accel_range(s_config.accel_range);
-    set_gyro_range(s_config.gyro_range);
-    set_dlpf(s_config.dlpf_bandwidth);
-    set_sample_rate(s_config.sample_rate_hz);
+    ret = set_accel_range(s_config.accel_range);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set accel range: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = set_gyro_range(s_config.gyro_range);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set gyro range: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = set_dlpf(s_config.dlpf_bandwidth);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set DLPF: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = set_sample_rate(s_config.sample_rate_hz);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set sample rate: %s", esp_err_to_name(ret));
+        return ret;
+    }
     
     /* Cấu hình FIFO (First-In-First-Out buffer) nếu cần */
     if (s_config.enable_fifo) {
         uint8_t fifo_config = 0;
-        read_bytes(0x23, &fifo_config, 1);  /* Thanh ghi FIFO_EN */
+        ret = read_bytes(0x23, &fifo_config, 1);  /* Thanh ghi FIFO_EN */
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to read FIFO_EN: %s", esp_err_to_name(ret));
+            return ret;
+        }
         fifo_config |= (1 << 6);  /* Enable FIFO */
-        write_byte(0x23, fifo_config);
+        ret = write_byte(0x23, fifo_config);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to enable FIFO: %s", esp_err_to_name(ret));
+            return ret;
+        }
         
-        write_byte(0x6A, 0x40);  /* Reset FIFO (USER_CTRL register) */
+        ret = write_byte(0x6A, 0x40);  /* Reset FIFO (USER_CTRL register) */
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to reset FIFO: %s", esp_err_to_name(ret));
+            return ret;
+        }
         vTaskDelay(pdMS_TO_TICKS(50));
-        write_byte(0x6A, 0x00);  /* Clear reset bit */
+        ret = write_byte(0x6A, 0x00);  /* Clear reset bit */
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to clear FIFO reset: %s", esp_err_to_name(ret));
+            return ret;
+        }
     }
     
     s_initialized = true;
@@ -384,6 +436,9 @@ esp_err_t mpu6050_read(mpu6050_data_t *data)
     if (!s_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
+    if (!data) {
+        return ESP_ERR_INVALID_ARG;
+    }
     
     uint8_t buf[14];
     
@@ -392,18 +447,18 @@ esp_err_t mpu6050_read(mpu6050_data_t *data)
     if (ret != ESP_OK) return ret;
     
     /* Parse accelerometer (big-endian: high byte first) */
-    data->ax = (buf[0] << 8) | buf[1];
-    data->ay = (buf[2] << 8) | buf[3];
-    data->az = (buf[4] << 8) | buf[5];
+    data->ax = (int16_t)((buf[0] << 8) | buf[1]);
+    data->ay = (int16_t)((buf[2] << 8) | buf[3]);
+    data->az = (int16_t)((buf[4] << 8) | buf[5]);
     
     /* Parse temperature (2 bytes) và chuyển đổi sang độ C */
-    int16_t temp_raw = (buf[6] << 8) | buf[7];
+    int16_t temp_raw = (int16_t)((buf[6] << 8) | buf[7]);
     data->temperature = temp_raw / 340.0 + 36.53;  /* Công thức từ datasheet */
     
     /* Parse gyroscope */
-    data->gx = (buf[8] << 8) | buf[9];
-    data->gy = (buf[10] << 8) | buf[11];
-    data->gz = (buf[12] << 8) | buf[13];
+    data->gx = (int16_t)((buf[8] << 8) | buf[9]);
+    data->gy = (int16_t)((buf[10] << 8) | buf[11]);
+    data->gz = (int16_t)((buf[12] << 8) | buf[13]);
     
     /* Bù trừ bias (đã tính từ calibration) */
     float ax_comp = data->ax - s_accel_bias[0];
@@ -477,56 +532,66 @@ esp_err_t mpu6050_calc_angles(mpu6050_data_t *data)
  * - Cảm biến phải được đặt yên hoàn toàn khi calibrate
  * - Nên đặt cảm biến trên mặt phẳng nằm ngang
  */
+// esp_err_t mpu6050_calibrate(void)
+// {
+//     if (!s_initialized) {
+//         return ESP_ERR_INVALID_STATE;
+//     }
+    
+//     ESP_LOGI(TAG, "Starting calibration... Keep sensor still!");
+//     vTaskDelay(pdMS_TO_TICKS(100));
+    
+//     const int num_samples = 200;  /* Số mẫu lấy trung bình */
+//     int32_t sum_accel[3] = {0, 0, 0};
+//     int32_t sum_gyro[3] = {0, 0, 0};
+    
+//     /* Thu thập mẫu */
+//     for (int i = 0; i < num_samples; i++) {
+//         mpu6050_data_t data;
+//         if (mpu6050_read(&data) == ESP_OK) {
+//             sum_accel[0] += data.ax;
+//             sum_accel[1] += data.ay;
+//             sum_accel[2] += data.az;
+//             sum_gyro[0] += data.gx;
+//             sum_gyro[1] += data.gy;
+//             sum_gyro[2] += data.gz;
+//         }
+//         vTaskDelay(pdMS_TO_TICKS(10));
+//     }
+    
+//     /* Tính bias trung bình */
+//     for (int i = 0; i < 3; i++) {
+//         s_accel_bias[i] = sum_accel[i] / num_samples;
+//         s_gyro_bias[i] = sum_gyro[i] / num_samples;
+//     }
+    
+//     /**
+//      * Điều chỉnh bias cho accelerometer trục Z
+//      * ==========================================
+//      * Khi đứng yên, trục Z phải đọc giá trị tương ứng với 1g
+//      * Ví dụ: Với dải ±2g, scale=16384 thì giá trị đúng là 16384
+//      * Bias = giá trị đọc được - giá trị kỳ vọng
+//      */
+//     float expected_z = s_accel_scale;  /* Giá trị lý thuyết khi đứng yên */
+//     s_accel_bias[2] -= expected_z;     /* Điều chỉnh bias trục Z */
+    
+//     ESP_LOGI(TAG, "Calibration complete!");
+//     ESP_LOGI(TAG, "Accel bias: X=%d, Y=%d, Z=%d", 
+//              (int)s_accel_bias[0], (int)s_accel_bias[1], (int)s_accel_bias[2]);
+//     ESP_LOGI(TAG, "Gyro bias: X=%d, Y=%d, Z=%d", 
+//              (int)s_gyro_bias[0], (int)s_gyro_bias[1], (int)s_gyro_bias[2]);
+    
+//     return ESP_OK;
+// }
 esp_err_t mpu6050_calibrate(void)
 {
-    if (!s_initialized) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    ESP_LOGI(TAG, "Starting calibration... Keep sensor still!");
-    vTaskDelay(pdMS_TO_TICKS(100));
-    
-    const int num_samples = 200;  /* Số mẫu lấy trung bình */
-    int32_t sum_accel[3] = {0, 0, 0};
-    int32_t sum_gyro[3] = {0, 0, 0};
-    
-    /* Thu thập mẫu */
-    for (int i = 0; i < num_samples; i++) {
-        mpu6050_data_t data;
-        if (mpu6050_read(&data) == ESP_OK) {
-            sum_accel[0] += data.ax;
-            sum_accel[1] += data.ay;
-            sum_accel[2] += data.az;
-            sum_gyro[0] += data.gx;
-            sum_gyro[1] += data.gy;
-            sum_gyro[2] += data.gz;
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-    
-    /* Tính bias trung bình */
-    for (int i = 0; i < 3; i++) {
-        s_accel_bias[i] = sum_accel[i] / num_samples;
-        s_gyro_bias[i] = sum_gyro[i] / num_samples;
-    }
-    
-    /**
-     * Điều chỉnh bias cho accelerometer trục Z
-     * ==========================================
-     * Khi đứng yên, trục Z phải đọc giá trị tương ứng với 1g
-     * Ví dụ: Với dải ±2g, scale=16384 thì giá trị đúng là 16384
-     * Bias = giá trị đọc được - giá trị kỳ vọng
-     */
-    float expected_z = s_accel_scale;  /* Giá trị lý thuyết khi đứng yên */
-    s_accel_bias[2] -= expected_z;     /* Điều chỉnh bias trục Z */
-    
-    ESP_LOGI(TAG, "Calibration complete!");
-    ESP_LOGI(TAG, "Accel bias: X=%d, Y=%d, Z=%d", 
-             (int)s_accel_bias[0], (int)s_accel_bias[1], (int)s_accel_bias[2]);
-    ESP_LOGI(TAG, "Gyro bias: X=%d, Y=%d, Z=%d", 
-             (int)s_gyro_bias[0], (int)s_gyro_bias[1], (int)s_gyro_bias[2]);
-    
+    // TAM THOI TAT CALIBRATION
+    printf("[MPU6050] Calibration SKIPPED - using default values\n");
     return ESP_OK;
+    
+    // Code cu bị comment:
+    // if (!s_initialized) { return ESP_ERR_INVALID_STATE; }
+    // ...
 }
 
 /**

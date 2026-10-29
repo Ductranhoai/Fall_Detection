@@ -4,10 +4,10 @@
 // MPU6050 Configuration structure
 typedef struct {
     // I2C pins and configuration
-    uint8_t sda_pin;           // I2C SDA pin (default: 21)
-    uint8_t scl_pin;           // I2C SCL pin (default: 22)
+    uint8_t sda_pin;           // I2C SDA pin (default: 5)
+    uint8_t scl_pin;           // I2C SCL pin (default: 4)
     i2c_port_t i2c_port;       // I2C port number (default: I2C_NUM_0)
-    uint32_t i2c_freq;         // I2C frequency in Hz (default: 400000)
+    uint32_t i2c_freq;         // I2C frequency in Hz (default: 100000)
     
     // Sensor ranges
     mpu_accel_range_t accel_range;  // Accelerometer full scale range
@@ -30,14 +30,14 @@ static inline mpu_config_t mpu_get_default_config(void)
         .sda_pin = 5,
         .scl_pin = 4,
         .i2c_port = I2C_NUM_0,
-        .i2c_freq = 400000,
-        .accel_range = MPU_ACCEL_RANGE_2G,      // ±2g for better sensitivity
-        .gyro_range = MPU_GYRO_RANGE_250,       // ±250°/s for fall detection
-        .dlpf_bandwidth = MPU_DLPF_BW_94,       // 21Hz filter for noise reduction
-        .sample_rate_hz = 200,                  // 100 Hz sampling
-        .read_interval_ms = 10,                 // Read every 50ms (20 Hz)
-        .enable_fifo = false,                   // FIFO not needed for basic use
-        .enable_calibration = true              // Auto-calibrate on startup
+        .i2c_freq = 100000,                     // 100 kHz: on dinh hon tren day/dupont
+        .accel_range = MPU_ACCEL_RANGE_8G,      // +-8g: bat duoc dinh va cham 2.5-6g
+        .gyro_range = MPU_GYRO_RANGE_500,       // +-500 deg/s
+        .dlpf_bandwidth = MPU_DLPF_BW_94,       // 94 Hz: du nhanh cho va cham
+        .sample_rate_hz = 200,                  // 200 Hz noi bo
+        .read_interval_ms = 10,                 // 100 Hz (1 tick voi CONFIG_FREERTOS_HZ=100)
+        .enable_fifo = false,
+        .enable_calibration = false             // Calibration dang tat, khong chan boot
     };
     return config;
 }

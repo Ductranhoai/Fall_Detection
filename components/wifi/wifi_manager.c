@@ -325,8 +325,8 @@ static char s_ssid[32] = {0};
 static char s_pass[64] = {0};
 static char s_ip[16] = {0};
 
-static bool s_manual_connect = false;
 static int s_retry = 0;
+static volatile bool s_suppress_retry = false;
 
 // static void clear_ip(void)
 // {
@@ -386,15 +386,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
             clear_ip();
 
-            // Nếu là manual connect → không retry
-            if (s_manual_connect)
-            {
-                ESP_LOGW(TAG, "Manual connect failed → stop retry");
-                return;
-            }
-
             // Auto reconnect (max 3 lần)
-            if (s_retry < 3)
+            if (!s_suppress_retry && s_retry < 3)
             {
                 s_retry++;
                 ESP_LOGI(TAG, "Retry %d...", s_retry);
@@ -412,7 +405,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         s_connected = true;
         s_connecting = false;
         s_retry = 0;
-        s_manual_connect = false;
 
         snprintf(s_ip, sizeof(s_ip), IPSTR, IP2STR(&event->ip_info.ip));
 
@@ -428,29 +420,66 @@ void wifi_manager_init(void)
     ESP_LOGI(TAG, "Init WiFi");
 
     esp_err_t ret = nvs_flash_init();
-    if (ret != ESP_OK)
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
-        nvs_flash_erase();
-        nvs_flash_init();
+        ESP_LOGW(TAG, "NVS needs erase: %s", esp_err_to_name(ret));
+        ret = nvs_flash_erase();
+        if (ret == ESP_OK)
+        {
+            ret = nvs_flash_init();
+        }
+    }
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGE(TAG, "NVS init failed: %s", esp_err_to_name(ret));
+        return;
     }
 
-    esp_netif_init();
-    esp_event_loop_create_default();
-    esp_netif_create_default_wifi_sta();
+    ret = esp_netif_init();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGE(TAG, "netif init failed: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ret = esp_event_loop_create_default();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGE(TAG, "event loop failed: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    if (esp_netif_create_default_wifi_sta() == NULL)
+    {
+        ESP_LOGE(TAG, "create default STA failed");
+        return;
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
+    ret = esp_wifi_init(&cfg);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "wifi init failed: %s", esp_err_to_name(ret));
+        return;
+    }
 
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                &wifi_event_handler, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                &wifi_event_handler, NULL);
 
-    esp_wifi_set_mode(WIFI_MODE_STA);
+    ret = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "set mode failed: %s", esp_err_to_name(ret));
+        return;
+    }
 
-    esp_wifi_start();
-    wifi_config_t empty = {0};
-    esp_wifi_set_config(WIFI_IF_STA, &empty);
+    ret = esp_wifi_start();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "wifi start failed: %s", esp_err_to_name(ret));
+    }
 }
 
 // void wifi_manager_connect(const char *ssid, const char *pass)
@@ -487,32 +516,49 @@ void wifi_manager_init(void)
 
 void wifi_manager_connect(const char *ssid, const char *pass)
 {
+    if (ssid == NULL || ssid[0] == '\0')
+    {
+        ESP_LOGE(TAG, "SSID is empty");
+        return;
+    }
+    if (pass == NULL)
+    {
+        pass = "";
+    }
+
     ESP_LOGI(TAG, "Connecting to %s", ssid);
 
     // reset state
     s_connected = false;
     s_connecting = true;
     s_retry = 0;
-    s_manual_connect = true;
 
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1);
+    s_ssid[sizeof(s_ssid) - 1] = '\0';
     strncpy(s_pass, pass, sizeof(s_pass) - 1);
+    s_pass[sizeof(s_pass) - 1] = '\0';
 
+    /* Tạm chặn auto-retry trong lúc đổi mạng */
+    s_suppress_retry = true;
     esp_wifi_disconnect();
-    // esp_wifi_stop();
     vTaskDelay(pdMS_TO_TICKS(200));
 
-    // esp_wifi_start();
-    vTaskDelay(pdMS_TO_TICKS(300));
     wifi_config_t old = {0};
     esp_wifi_set_config(WIFI_IF_STA, &old);
     vTaskDelay(pdMS_TO_TICKS(100));
 
     wifi_config_t cfg = {0};
-    strncpy((char *)cfg.sta.ssid, ssid, sizeof(cfg.sta.ssid) - 1);
-    strncpy((char *)cfg.sta.password, pass, sizeof(cfg.sta.password) - 1);
+    strncpy((char *)cfg.sta.ssid, s_ssid, sizeof(cfg.sta.ssid) - 1);
+    strncpy((char *)cfg.sta.password, s_pass, sizeof(cfg.sta.password) - 1);
 
-    esp_wifi_set_config(WIFI_IF_STA, &cfg);
+    esp_err_t ret = esp_wifi_set_config(WIFI_IF_STA, &cfg);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "set config failed: %s", esp_err_to_name(ret));
+        s_connecting = false;
+        s_suppress_retry = false;
+        return;
+    }
 
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     if (netif)
@@ -523,8 +569,14 @@ void wifi_manager_connect(const char *ssid, const char *pass)
     }
 
     s_ip[0] = '\0';
+    s_suppress_retry = false;
 
-    esp_wifi_connect();
+    ret = esp_wifi_connect();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "connect failed: %s", esp_err_to_name(ret));
+        s_connecting = false;
+    }
 }
 
 // void wifi_manager_disconnect(void)
@@ -575,6 +627,7 @@ void wifi_manager_disconnect(void)
 {
     ESP_LOGI(TAG, "Disconnect");
 
+    s_suppress_retry = true;
     esp_wifi_disconnect();
 
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
@@ -591,6 +644,7 @@ void wifi_manager_disconnect(void)
 
     s_connected = false;
     s_connecting = false;
+    s_retry = 0;
     s_ip[0] = '\0';
 }
 
@@ -598,9 +652,13 @@ void wifi_manager_clear_credentials(void)
 {
     ESP_LOGI(TAG, "Clear credentials");
 
+    s_suppress_retry = true;
     wifi_storage_save("", "");
     wifi_config_t cfg = {0};
     esp_wifi_set_config(WIFI_IF_STA, &cfg);
+
+    s_ssid[0] = '\0';
+    s_pass[0] = '\0';
 
     wifi_manager_disconnect();
 }
