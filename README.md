@@ -4,7 +4,7 @@ Thiết bị đeo/đặt trên người dùng để phát hiện té ngã, báo 
 
 - Board: ESP32-C3 DevKitM-1
 - Framework: ESP-IDF 5.5.3 + PlatformIO (env `esp32-c3`)
-- Flash: 4 MB, phân vùng app `factory` 1500 KB (`partitions_large.csv`)
+- Flash: 4 MB, phân vùng app `factory` 1500 KB (`partitions/partitions_large.csv`)
 - FreeRTOS tick: 100 Hz, chu kỳ đọc cảm biến 10 ms (100 Hz)
 - Ngôn ngữ log: tiếng Anh, tài liệu: tiếng Việt
 
@@ -32,34 +32,47 @@ Thiết bị đeo/đặt trên người dùng để phát hiện té ngã, báo 
 Lưu ý:
 
 - GPIO9 là chân strapping (BOOT). Giữ nút khi reset có thể đưa chip vào chế độ nạp firmware; chỉ bấm khi thiết bị đang chạy bình thường.
-- Module MPU6050 giá rẻ thường đã có pull-up trên board. Nếu dây dài hoặc I2C không ổn định, rút ngắn dây hoặc giảm `i2c_freq` xuống 50 kHz trong `components/mpu/mpu_config.h`.
+- Module MPU6050 giá rẻ thường đã có pull-up trên board. Nếu dây dài hoặc I2C không ổn định, rút ngắn dây hoặc giảm `i2c_freq` xuống 50 kHz trong `components/mpu_manager/include/mpu_config.h`.
 - Nếu còi không kêu hoặc kêu yếu, kiểm tra còi cần áp/dòng bao nhiêu và dùng transistor + nguồn ngoài nếu cần.
 
 ## Cấu trúc dự án
 
 ```
 Fall_Detection/
-├── src/main.c                  # Khởi tạo, task còi, task nút, task trạng thái mạng
+├── src/
+│   ├── main.c                  # Khởi tạo, task còi, task nút, task trạng thái mạng
+│   └── CMakeLists.txt
 ├── components/
-│   ├── mpu/                    # MPU6050, cấu hình, máy trạng thái phát hiện ngã
+│   ├── mpu6050/                # Driver MPU6050
+│   ├── fall_detection/         # Máy trạng thái phát hiện ngã
+│   ├── mpu_manager/            # Task đọc cảm biến + mpu_config.h
 │   ├── button/                 # Nút nhấn + ngắt GPIO
-│   ├── pwm_buzzer/             # Còi LEDC, mute/stop tức thời
+│   ├── buzzer/                 # Còi LEDC, mute/stop tức thời
 │   ├── ble/                    # NimBLE, NUS GATT, provisioning WiFi
-│   ├── wifi/                   # WiFi STA, lưu credentials vào NVS
-│   ├── cli/                    # Lệnh console (chưa bật trong app_main)
-│   ├── fs/                     # Tiện ích filesystem (chưa dùng)
-│   └── max30102/               # Driver cảm biến phụ (chưa dùng)
-├── partitions_large.csv        # nvs 0x6000, phy 0x1000, factory 1500K
+│   └── wifi/                   # WiFi STA, lưu credentials vào NVS
+├── extras/                     # Module tùy chọn, không build mặc định
+│   ├── cli/
+│   ├── fs/
+│   ├── max30102/
+│   ├── classic_bt/
+│   └── wifi_cli/
+├── docs/
+│   ├── flow_project.md
+│   ├── flow_form_source.txt
+│   └── command.txt
+├── partitions/
+│   └── partitions_large.csv    # nvs 0x6000, phy 0x1000, factory 1500K
+├── archive/                    # File cũ/backup, không build
 ├── platformio.ini
 ├── sdkconfig.esp32-c3
-└── flow_project.md             # Ghi chú thiết kế chi tiết
+└── README.md
 ```
 
 ## Cách hoạt động
 
 ### Phát hiện té ngã
 
-Máy trạng thái trong `components/mpu/fall_detection.c`:
+Máy trạng thái trong `components/fall_detection/fall_detection.c`:
 
 ```
 NORMAL -> FREE_FALL -> IMPACT -> TILT -> FALL
@@ -85,7 +98,7 @@ Thông số mặc định (`fall_get_default_config`):
 
 ### Cấu hình MPU6050
 
-`components/mpu/mpu_config.h`:
+`components/mpu_manager/include/mpu_config.h`:
 
 - Accel ±8 g, gyro ±500 °/s
 - DLPF 94 Hz, sample rate nội bộ 200 Hz
@@ -226,7 +239,7 @@ Firmware hiện khoảng 1.03 MiB, chiếm gần 70% phân vùng app 1500 KB. N�
 
 ## Tài liệu tham khảo
 
-- `flow_project.md`: ghi chú thiết kế và lịch sử thay đổi chi tiết.
+- `docs/flow_project.md`: ghi chú thiết kế và lịch sử thay đổi chi tiết.
 - ESP-IDF: https://docs.espressif.com/projects/esp-idf/
 - PlatformIO: https://docs.platformio.org/
 - NimBLE: https://mynewt.apache.org/latest/network/index.html
