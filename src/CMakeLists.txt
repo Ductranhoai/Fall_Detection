@@ -5,6 +5,7 @@ idf_component_register(
         mpu_manager
         mpu6050
         fall_detection
+        max30102
         button
         buzzer
         wifi

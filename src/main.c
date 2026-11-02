@@ -12,6 +12,7 @@
 #include "button.h"
 #include "wifi_manager.h"
 #include "bt_manager.h"
+#include "max30102.h"
 
 static const char *TAG = "MAIN";
 static volatile bool s_fall_reported = false;
@@ -19,6 +20,7 @@ static volatile bool s_alarm_active = false;
 static volatile bool s_cooldown = false;
 static TaskHandle_t s_alarm_task_handle = NULL;
 static TaskHandle_t s_button_task_handle = NULL;
+static int64_t s_last_telemetry_us = 0;
 
 static void alarm_sos_4khz(void);
 static void alarm_task(void *arg);
@@ -184,6 +186,55 @@ static void on_mpu_data(mpu6050_data_t *data)
     {
         s_fall_reported = false;
     }
+
+    int64_t now_us = esp_timer_get_time();
+    if (bt_manager_is_connected() &&
+        (now_us - s_last_telemetry_us) >= 250000)
+    {
+        s_last_telemetry_us = now_us;
+
+        char telemetry[128];
+        snprintf(telemetry, sizeof(telemetry),
+                 "TEL:%.2f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
+                 data->accel_x, data->accel_y, data->accel_z,
+                 data->gyro_x, data->gyro_y, data->gyro_z,
+                 data->pitch, data->roll, data->temperature);
+        bt_manager_notify_text(telemetry);
+    }
+}
+
+#define VITALS_POLL_MS 40
+
+static void vitals_task(void *arg)
+{
+    max30102_data_t data;
+    int64_t last_notify_us = 0;
+
+    while (1)
+    {
+        if (max30102_read(&data) == ESP_OK)
+        {
+            int64_t now_us = esp_timer_get_time();
+            if (data.finger_detected && (now_us - last_notify_us) >= 1000000)
+            {
+                last_notify_us = now_us;
+
+                char msg[20];
+                if (data.heart_rate >= 30.0f)
+                {
+                    snprintf(msg, sizeof(msg), "HR:%.0f", data.heart_rate);
+                    bt_manager_notify_text(msg);
+                }
+                if (data.spo2 > 0.0f)
+                {
+                    snprintf(msg, sizeof(msg), "SPO2:%.0f", data.spo2);
+                    bt_manager_notify_text(msg);
+                }
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(VITALS_POLL_MS));
+    }
 }
 
 static void alarm_sos_4khz(void)
@@ -274,6 +325,16 @@ void app_main(void)
         printf("[OK] MPU initialized\n");
         mpu_manager_start_monitoring(on_mpu_data);
         printf("[OK] Fall detection started\n");
+    }
+
+    if (max30102_init(mpu_config.i2c_port, mpu_config.sda_pin, mpu_config.scl_pin) == ESP_OK)
+    {
+        printf("[OK] MAX30102 initialized\n");
+        xTaskCreate(vitals_task, "vitals", 3072, NULL, 4, NULL);
+    }
+    else
+    {
+        printf("[WARN] MAX30102 not found\n");
     }
 
     wifi_manager_init();

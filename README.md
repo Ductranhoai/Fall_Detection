@@ -11,6 +11,7 @@ Thiết bị đeo/đặt trên người dùng để phát hiện té ngã, báo 
 ## Tính năng
 
 - Đọc MPU6050 qua I2C, phát hiện té ngã theo máy trạng thái 4 bước.
+- Đo nhịp tim và SpO2 bằng MAX30102 trên cùng bus I2C với MPU6050 (nếu có gắn cảm biến).
 - Còi báo động SOS trên GPIO0, tắt ngay khi bấm nút.
 - Nút nhấn GPIO9 dùng ngắt, chống rung 30 ms; giữ 5 giây để bật còi thủ công.
 - BLE (NimBLE) với Nordic UART Service: gửi sự kiện, nhận lệnh cấu hình WiFi.
@@ -25,6 +26,10 @@ Thiết bị đeo/đặt trên người dùng để phát hiện té ngã, báo 
 | MPU6050 GND | GND | |
 | MPU6050 SDA | GPIO5 | Có pull-up nội bộ |
 | MPU6050 SCL | GPIO4 | Có pull-up nội bộ, I2C 100 kHz |
+| MAX30102 VCC | 3V3 | Không dùng 5V |
+| MAX30102 GND | GND | |
+| MAX30102 SDA | GPIO5 | Dùng chung bus I2C với MPU6050, địa chỉ 0x57 |
+| MAX30102 SCL | GPIO4 | Dùng chung bus I2C với MPU6050 |
 | Còi/buzzer (+) | GPIO0 | Điều khiển bằng LEDC |
 | Còi/buzzer (-) | GND | Còi 5V nên dùng transistor |
 | Nút nhấn | GPIO9 ↔ GND | Pull-up nội bộ, active-low |
@@ -33,6 +38,7 @@ Lưu ý:
 
 - GPIO9 là chân strapping (BOOT). Giữ nút khi reset có thể đưa chip vào chế độ nạp firmware; chỉ bấm khi thiết bị đang chạy bình thường.
 - Module MPU6050 giá rẻ thường đã có pull-up trên board. Nếu dây dài hoặc I2C không ổn định, rút ngắn dây hoặc giảm `i2c_freq` xuống 50 kHz trong `components/mpu_manager/include/mpu_config.h`.
+- MAX30102 dùng chung bus I2C với MPU6050 (địa chỉ khác nhau: 0x57 và 0x68) nên không cần đấu thêm chân. Nếu không gắn cảm biến, firmware vẫn chạy bình thường và chỉ in cảnh báo `[WARN] MAX30102 not found`.
 - Nếu còi không kêu hoặc kêu yếu, kiểm tra còi cần áp/dòng bao nhiêu và dùng transistor + nguồn ngoài nếu cần.
 
 ## Cấu trúc dự án
@@ -50,10 +56,10 @@ Fall_Detection/
 │   ├── buzzer/                 # Còi LEDC, mute/stop tức thời
 │   ├── ble/                    # NimBLE, NUS GATT, provisioning WiFi
 │   └── wifi/                   # WiFi STA, lưu credentials vào NVS
-├── extras/                     # Module tùy chọn, không build mặc định
+├── extras/                     # Module tùy chọn (chỉ max30102 được build mặc định)
 │   ├── cli/
 │   ├── fs/
-│   ├── max30102/
+│   ├── max30102/               # Driver MAX30102 (thêm qua EXTRA_COMPONENT_DIRS)
 │   ├── classic_bt/
 │   └── wifi_cli/
 ├── docs/
@@ -149,6 +155,8 @@ Thông báo thiết bị gửi (mỗi message ≤ 20 byte):
 | `I:<x.xx>g` | Gia tốc va chạm lớn nhất |
 | `T:<tilt>` | Góc nghiêng cuối cùng (độ) |
 | `CLEAR` | Còi đã được tắt |
+| `HR:<bpm>` | Nhịp tim (MAX30102, gửi tối đa mỗi giây khi phát hiện ngón tay) |
+| `SPO2:<%>` | Nồng độ oxy trong máu (MAX30102) |
 | `WIFI:UP` | WiFi đã kết nối |
 | `IP:<addr>` | Địa chỉ IP nhận được |
 | `WIFI:DOWN` | Mất kết nối WiFi |
@@ -162,7 +170,7 @@ Thông báo thiết bị gửi (mỗi message ≤ 20 byte):
 
 Dùng app BLE bất kỳ hỗ trợ NUS (nRF Connect, Serial Bluetooth Terminal, ...):
 
-1. Quét và kết nối tới `FallDetector`.
+1. Quét và kết nối tới `TestFall`.
 2. Bật notify cho characteristic TX (`...0003...`).
 3. Ghi vào characteristic RX (`...0002...`) chuỗi:
 
@@ -209,11 +217,12 @@ Firmware hiện khoảng 1.03 MiB, chiếm gần 70% phân vùng app 1500 KB. N�
 
 ## Kiểm tra nhanh sau khi nạp
 
-1. Mở serial monitor 115200: thấy log khởi động, 2 tiếng bíp, `[OK] MPU initialized`, `[OK] Fall detection started`, `[OK] WiFi station started`, `[OK] BLE ready`.
-2. Dùng điện thoại quét BLE, thấy `FallDetector`, kết nối và bật notify TX: nhận `READY`.
+1. Mở serial monitor 115200: thấy log khởi động, 2 tiếng bíp, `[OK] MPU initialized`, `[OK] Fall detection started`, `[OK] WiFi station started`, `[OK] BLE ready`; nếu gắn MAX30102 thấy thêm `[OK] MAX30102 initialized` (không gắn thì có `[WARN] MAX30102 not found`).
+2. Dùng điện thoại quét BLE, thấy `TestFall`, kết nối và bật notify TX: nhận `READY`.
 3. Ghi `WIFI:ssid,pass` vào RX: nhận `CFG:OK`, sau đó `WIFI:UP` + `IP:...`.
 4. Giữ nút 5 giây: còi SOS kêu; bấm nút: còi tắt ngay, nhận `CLEAR`.
 5. Lắc/ngã thử thiết bị: xem log `[FALL] Free fall`, `Impact`, `Tilt`, `DETECTED` và BLE nhận `FALL`, `I:...`, `T:...`.
+6. Đặt ngón tay lên MAX30102: BLE nhận `HR:...` và `SPO2:...` mỗi giây.
 
 ## Xử lý sự cố
 
@@ -221,12 +230,14 @@ Firmware hiện khoảng 1.03 MiB, chiếm gần 70% phân vùng app 1500 KB. N�
 |---|---|
 | `[ERROR] MPU init failed!` | Đấu dây SDA/SCL, nguồn 3V3, địa chỉ 0x68, dây quá dài, pull-up |
 | I2C lỗi ngẫu nhiên | Giảm `i2c_freq` xuống 50000, rút ngắn dây, kiểm tra GND chung |
-| Không thấy `FallDetector` trên BLE | Kiểm tra log BLE init, reset board, tắt/bật Bluetooth điện thoại |
+| Không thấy `TestFall` trên BLE | Kiểm tra log BLE init, reset board, tắt/bật Bluetooth điện thoại |
 | Kết nối BLE nhưng không nhận notify | Phải bật notify/indicate cho characteristic TX |
 | Ghi `WIFI:...` nhưng không có phản hồi | Kiểm tra đúng characteristic RX, đúng định dạng có dấu phẩy |
 | `WIFI:FAIL` | Sai SSID/mật khẩu, mạng 5 GHz (ESP32-C3 chỉ 2.4 GHz), router chặn |
 | Còi kêu yếu/không kêu | Kiểm tra còi, transistor, nguồn; GPIO0 dùng LEDC |
 | Nút không tác dụng | Nối GPIO9 với GND khi bấm, không giữ nút lúc reset |
+| `[WARN] MAX30102 not found` | Kiểm tra nguồn 3V3, SDA GPIO5/SCL GPIO4, địa chỉ 0x57; thử `i2c_master_probe` |
+| Không nhận `HR:`/`SPO2:` | Đặt ngón tay che kín cảm biến, giữ yên; giá trị chỉ gửi khi phát hiện ngón tay |
 | Build lỗi target config JSON | `pio run -t fullclean` rồi build lại |
 
 ## Giới hạn hiện tại
@@ -235,6 +246,7 @@ Firmware hiện khoảng 1.03 MiB, chiếm gần 70% phân vùng app 1500 KB. N�
 - Chưa có chế độ AP để cấu hình WiFi; chỉ cấu hình qua BLE.
 - Provisioning WiFi nhận một lệnh trọn vẹn mỗi lần ghi BLE (xem lưu ý về MTU).
 - Credentials WiFi lưu dạng plaintext trong NVS.
+- MAX30102 chỉ đo nhịp tim và SpO2, không đo huyết áp; số đo mang tính tham khảo.
 - Đây là thiết bị hỗ trợ cảnh báo, không phải thiết bị y tế.
 
 ## Tài liệu tham khảo

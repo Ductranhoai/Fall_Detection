@@ -22,7 +22,7 @@
 #include "wifi_manager.h"
 
 static const char *TAG = "BT";
-#define DEVICE_NAME "FallDetector"
+#define DEVICE_NAME "TestFall"
 
 /* Nordic UART Service UUIDs (tuong thich moi app BLE) */
 static const ble_uuid128_t s_svc_uuid = BLE_UUID128_INIT(

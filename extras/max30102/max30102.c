@@ -1,5 +1,6 @@
 #include "max30102.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "math.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -8,13 +9,15 @@ static const char *TAG = "MAX30102";
 
 static i2c_port_t i2c_port;
 static bool initialized = false;
+static bool owns_driver = false;
 
 static float hr = 0;
 static float spo2_val = 0;
 static bool finger = false;
 
-#define BUF_SIZE 32
+#define BUF_SIZE 64
 static uint32_t ir_buf[BUF_SIZE];
+static int64_t ts_buf[BUF_SIZE];
 static int idx = 0;
 static int filled = 0;
 
@@ -32,6 +35,12 @@ static esp_err_t write_reg(uint8_t reg, uint8_t val)
     i2c_cmd_link_delete(cmd);
 
     return ret;
+}
+
+static esp_err_t read_reg(uint8_t reg, uint8_t *val)
+{
+    return i2c_master_write_read_device(i2c_port, MAX30102_ADDR, &reg, 1,
+                                        val, 1, pdMS_TO_TICKS(100));
 }
 
 static esp_err_t read_fifo(uint32_t *red, uint32_t *ir)
@@ -68,7 +77,7 @@ static esp_err_t read_fifo(uint32_t *red, uint32_t *ir)
     return ESP_OK;
 }
 
-// ===== HEART RATE (simple peak detect) =====
+// ===== HEART RATE (peak interval detect) =====
 static void calc_hr(void)
 {
     if (filled < BUF_SIZE) return;
@@ -80,17 +89,32 @@ static void calc_hr(void)
         if (ir_buf[i] > max) max = ir_buf[i];
     }
 
-    uint32_t th = min + (max - min) * 0.6;
+    if (max - min < 1000) return;
 
-    int peaks = 0;
-    for (int i = 1; i < BUF_SIZE; i++) {
-        if (ir_buf[i] > th && ir_buf[i-1] <= th) {
-            peaks++;
+    uint32_t th = min + (max - min) * 0.6f;
+
+    int64_t last_peak = 0;
+    int intervals = 0;
+    float sum_ms = 0;
+
+    for (int k = 0; k < BUF_SIZE; k++) {
+        int i = (idx + k) % BUF_SIZE;
+        int prev = (i + BUF_SIZE - 1) % BUF_SIZE;
+
+        if (ir_buf[i] > th && ir_buf[prev] <= th) {
+            if (last_peak > 0 && ts_buf[i] > last_peak) {
+                sum_ms += (float)(ts_buf[i] - last_peak);
+                intervals++;
+            }
+            last_peak = ts_buf[i];
         }
     }
 
-    if (peaks > 1) {
-        hr = peaks * 6.0f; // rough BPM scaling
+    if (intervals > 0) {
+        float bpm = 60000.0f / (sum_ms / intervals);
+        if (bpm >= 30.0f && bpm <= 220.0f) {
+            hr = bpm;
+        }
     }
 }
 
@@ -109,6 +133,13 @@ static float calc_spo2(uint32_t red, uint32_t ir)
     r_avg /= n;
     ir_avg /= n;
 
+    if (r_avg <= 0.0f || ir_avg <= 0.0f || ir == 0) {
+        n = 0;
+        r_avg = 0;
+        ir_avg = 0;
+        return 0;
+    }
+
     float ratio = (red / r_avg) / (ir / ir_avg);
 
     float spo2 = 110 - 25 * ratio;
@@ -126,31 +157,78 @@ static float calc_spo2(uint32_t red, uint32_t ir)
 esp_err_t max30102_init(i2c_port_t port, uint8_t sda, uint8_t scl)
 {
     i2c_port = port;
+    owns_driver = false;
 
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = sda,
-        .scl_io_num = scl,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 400000,
-    };
+    /* Bus co the da duoc MPU6050 khoi tao tren cung I2C port.
+       Chi cai driver khi bus chua san sang, neu da co thi dung chung. */
+    uint8_t part = 0;
+    esp_err_t ret = read_reg(MAX30102_REG_PART_ID, &part);
 
-    i2c_param_config(port, &conf);
-    i2c_driver_install(port, I2C_MODE_MASTER, 0, 0, 0);
+    if (ret == ESP_ERR_INVALID_STATE) {
+        i2c_config_t conf = {
+            .mode = I2C_MODE_MASTER,
+            .sda_io_num = sda,
+            .scl_io_num = scl,
+            .sda_pullup_en = GPIO_PULLUP_ENABLE,
+            .scl_pullup_en = GPIO_PULLUP_ENABLE,
+            .master.clk_speed = 400000,
+        };
 
-    vTaskDelay(pdMS_TO_TICKS(100));
+        ret = i2c_param_config(port, &conf);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "I2C param config failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
 
-    ESP_LOGI(TAG, "Part ID check...");
+        ret = i2c_driver_install(port, I2C_MODE_MASTER, 0, 0, 0);
+        if (ret != ESP_OK) {
+            i2c_driver_delete(port);
+            ESP_LOGE(TAG, "I2C driver install failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
 
+        owns_driver = true;
+        vTaskDelay(pdMS_TO_TICKS(10));
+        ret = read_reg(MAX30102_REG_PART_ID, &part);
+    } else {
+        ESP_LOGI(TAG, "Sharing existing I2C bus");
+    }
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "I2C read failed: %s", esp_err_to_name(ret));
+        if (owns_driver) {
+            i2c_driver_delete(port);
+            owns_driver = false;
+        }
+        return ret;
+    }
+
+    if (part != 0x15) {
+        ESP_LOGE(TAG, "Wrong part ID: 0x%02X (expected 0x15)", part);
+        if (owns_driver) {
+            i2c_driver_delete(port);
+            owns_driver = false;
+        }
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    ESP_LOGI(TAG, "Part ID OK (0x%02X)", part);
+
+    /* Soft reset */
     write_reg(MAX30102_REG_MODE_CONFIG, 0x40);
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    write_reg(MAX30102_REG_FIFO_CONFIG, 0x4F);
+    write_reg(MAX30102_REG_FIFO_CONFIG, 0x5F);
     write_reg(MAX30102_REG_MODE_CONFIG, 0x03);
     write_reg(MAX30102_REG_SPO2_CONFIG, 0x27);
     write_reg(MAX30102_REG_LED1_PA, 0x24);
     write_reg(MAX30102_REG_LED2_PA, 0x24);
+
+    idx = 0;
+    filled = 0;
+    hr = 0;
+    spo2_val = 0;
+    finger = false;
 
     initialized = true;
 
@@ -170,6 +248,7 @@ esp_err_t max30102_read(max30102_data_t *data)
 
     // buffer
     ir_buf[idx] = ir;
+    ts_buf[idx] = esp_timer_get_time() / 1000;
     idx = (idx + 1) % BUF_SIZE;
     if (filled < BUF_SIZE) filled++;
 
@@ -210,6 +289,9 @@ esp_err_t max30102_get_spo2(float *v)
 
 void max30102_deinit(void)
 {
-    i2c_driver_delete(i2c_port);
+    if (owns_driver) {
+        i2c_driver_delete(i2c_port);
+        owns_driver = false;
+    }
     initialized = false;
 }
